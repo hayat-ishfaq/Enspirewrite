@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --caret-x: 50vw;
+    --caret-y: 62vh;
+    --track-y: 62vh;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Courier Prime', 'IBM Plex Mono', monospace;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow: hidden;
+  }
+}
+
+/* Custom scrollbar hiding for typewriter aesthetic */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Vintage Paper Noise / Grain overlay */
+.paper-grain {
+  background-image: radial-gradient(rgba(0, 0, 0, 0.04) 1px, transparent 0);
+  background-size: 24px 24px;
+}
+
+.paper-grain-dark {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 0);
+  background-size: 24px 24px;
+}
+
+/* Smooth Caret Pill Transition */
+.carriage-pill-transition {
+  transition: transform 50ms cubic-bezier(0.16, 1, 0.3, 1), opacity 150ms ease;
+  will-change: transform;
+}
+
+/* Conical headlight beam upward */
+.spotlight-cone {
+  pointer-events: none;
+  position: absolute;
+  will-change: transform, opacity;
+}
