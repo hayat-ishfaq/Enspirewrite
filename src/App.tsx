@@ -142,6 +142,7 @@ export const App: React.FC = () => {
 
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
   const [isEditorFocused, setIsEditorFocused] = useState<boolean>(true);
+  const [saveStatus, setSaveStatus] = useState<string | null>(null);
 
   // Switch ledger data when author account changes
   const switchAuthorAccount = useCallback((newUser: User | null) => {
@@ -307,6 +308,24 @@ export const App: React.FC = () => {
     handleUpdateSettings({ isMuted: !settings.isMuted });
   }, [settings.isMuted, handleUpdateSettings]);
 
+  // Explicit Save Handler (Ctrl + S)
+  const handleSaveDocument = useCallback(() => {
+    if (!currentEntry) return;
+    const key = getStorageEntriesKey(currentUser);
+    try {
+      localStorage.setItem(key, JSON.stringify(entries));
+    } catch (e) {
+      console.warn('Failed to save to localStorage', e);
+    }
+
+    typewriterAudio.playKeyClick();
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    setSaveStatus(`Ledger Saved at ${time}`);
+    setTimeout(() => {
+      setSaveStatus(null);
+    }, 2000);
+  }, [currentEntry, currentUser, entries]);
+
   // Export handlers
   const handleExportMarkdown = useCallback(() => {
     if (!currentEntry) return;
@@ -361,6 +380,9 @@ export const App: React.FC = () => {
         handleToggleMute();
       } else if (isModifier && e.key.toLowerCase() === 's') {
         e.preventDefault();
+        handleSaveDocument();
+      } else if (isModifier && e.key.toLowerCase() === 'e') {
+        e.preventDefault();
         handleExportMarkdown();
       } else if (e.key === 'Escape' && isSidebarOpen) {
         setIsSidebarOpen(false);
@@ -369,7 +391,7 @@ export const App: React.FC = () => {
 
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [isSidebarOpen, handleCreateEntry, handleToggleMute, handleExportMarkdown]);
+  }, [isSidebarOpen, handleCreateEntry, handleToggleMute, handleSaveDocument, handleExportMarkdown]);
 
   // Theme styling for canvas
   const canvasBgClass = {
@@ -456,6 +478,14 @@ export const App: React.FC = () => {
         onAuthSuccess={handleAuthSuccess}
         theme={settings.theme}
       />
+
+      {/* 6. SAVE NOTIFICATION TOAST */}
+      {saveStatus && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 pointer-events-none px-4 py-2 rounded-full border border-current/20 bg-black/75 dark:bg-zinc-900/90 text-white backdrop-blur-md text-xs font-mono tracking-wider shadow-2xl transition-all flex items-center gap-2.5">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="font-semibold">{saveStatus}</span>
+        </div>
+      )}
     </div>
   );
 };

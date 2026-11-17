@@ -575,8 +575,12 @@ export const JournalSidebar: React.FC<JournalSidebarProps> = ({
                   <span className="font-mono bg-current/10 px-1 rounded">Ctrl + M</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Export Markdown</span>
+                  <span>Save Manuscript</span>
                   <span className="font-mono bg-current/10 px-1 rounded">Ctrl + S</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Export Markdown</span>
+                  <span className="font-mono bg-current/10 px-1 rounded">Ctrl + E</span>
                 </div>
               </div>
             </div>

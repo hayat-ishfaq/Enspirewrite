@@ -53,11 +53,12 @@ A minimalist, tactile, vintage-typewriter-inspired journaling, diary, and notes 
 
 | Shortcut | Action |
 | :--- | :--- |
+| `Ctrl / Cmd + S` | Save Active Manuscript / Ledger |
 | `Ctrl / Cmd + B` | Toggle Archival Drawer |
 | `Ctrl / Cmd + D` | Create Today's Diary Entry |
 | `Ctrl / Cmd + N` | Create Blank Note |
 | `Ctrl / Cmd + M` | Toggle Mechanical Audio Mute |
-| `Ctrl / Cmd + S` | Export Current Note as Markdown (.md) |
+| `Ctrl / Cmd + E` | Export Current Note as Markdown (.md) |
 | `Esc` | Close Archival Drawer |
 
 ---
