@@ -10,8 +10,10 @@ import {
   Sliders,
   Maximize2,
   Minimize2,
+  User as UserIcon,
+  LogOut,
 } from 'lucide-react';
-import type { ThemeMode, FontChoice, SpotlightIntensity, JournalEntry } from '../types';
+import type { ThemeMode, FontChoice, SpotlightIntensity, JournalEntry, User } from '../types';
 
 interface MinimalHUDProps {
   currentEntry: JournalEntry;
@@ -21,6 +23,9 @@ interface MinimalHUDProps {
   font: FontChoice;
   spotlightIntensity: SpotlightIntensity;
   isMuted: boolean;
+  currentUser: User | null;
+  onOpenAuth: () => void;
+  onSignOut: () => void;
   onToggleSidebar: () => void;
   onToggleMute: () => void;
   onCycleTheme: () => void;
@@ -36,6 +41,9 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
   theme,
   spotlightIntensity,
   isMuted,
+  currentUser,
+  onOpenAuth,
+  onSignOut,
   onToggleSidebar,
   onToggleMute,
   onCycleTheme,
@@ -45,6 +53,7 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
 }) => {
   const [isFullscreen, setIsFullscreen] = React.useState<boolean>(false);
   const [showExportMenu, setShowExportMenu] = React.useState<boolean>(false);
+  const [showUserMenu, setShowUserMenu] = React.useState<boolean>(false);
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -89,7 +98,7 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
         </button>
 
         <div className="flex items-center gap-2 text-xs font-mono select-none">
-          <span className={`font-semibold truncate max-w-[160px] sm:max-w-[280px] ${hudTextColor}`}>
+          <span className={`font-semibold truncate max-w-[140px] sm:max-w-[240px] ${hudTextColor}`}>
             {currentEntry.title}
           </span>
           <span className="text-[10px] opacity-50 px-1.5 py-0.5 rounded border border-current">
@@ -98,8 +107,57 @@ export const MinimalHUD: React.FC<MinimalHUDProps> = ({
         </div>
       </div>
 
-      {/* TOP-RIGHT: Live Word Count & Tactile Controls */}
+      {/* TOP-RIGHT: User Account, Word Count & Tactile Controls */}
       <div className="pointer-events-auto flex items-center gap-2 sm:gap-3 transition-opacity duration-300 opacity-60 hover:opacity-100">
+        {/* User Account / Sign In Badge */}
+        <div className="relative">
+          {currentUser ? (
+            <button
+              onClick={() => setShowUserMenu(!showUserMenu)}
+              title={`Logged in as ${currentUser.name} (${currentUser.email})`}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs font-mono transition-all cursor-pointer backdrop-blur-sm shadow-sm ${pillBg}`}
+            >
+              <span className="w-4 h-4 rounded-full bg-current text-white dark:text-black flex items-center justify-center text-[10px] font-bold">
+                {currentUser.avatarLetter}
+              </span>
+              <span className="hidden md:inline font-medium max-w-[90px] truncate">
+                {currentUser.name.split(' ')[0]}
+              </span>
+            </button>
+          ) : (
+            <button
+              onClick={onOpenAuth}
+              title="Sign In / Create Author Account"
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs font-mono transition-all cursor-pointer backdrop-blur-sm shadow-sm ${pillBg}`}
+            >
+              <UserIcon className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline font-medium">Sign In</span>
+            </button>
+          )}
+
+          {showUserMenu && currentUser && (
+            <div
+              className={`absolute right-0 mt-2 w-48 rounded-lg border p-1 font-mono text-xs z-50 backdrop-blur-md ${dropdownBg}`}
+              onMouseLeave={() => setShowUserMenu(false)}
+            >
+              <div className="px-3 py-2 border-b border-current/15 mb-1">
+                <div className="font-bold truncate">{currentUser.name}</div>
+                <div className="text-[10px] opacity-60 truncate">{currentUser.email}</div>
+              </div>
+              <button
+                onClick={() => {
+                  onSignOut();
+                  setShowUserMenu(false);
+                }}
+                className="w-full text-left px-3 py-2 rounded hover:bg-red-500/10 text-red-500 transition-colors flex items-center gap-2 cursor-pointer"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Sign Out</span>
+              </button>
+            </div>
+          )}
+        </div>
+
         {/* Words and Characters Counter */}
         <div
           className={`px-3 py-1.5 rounded-md border text-xs font-mono tracking-tight select-none backdrop-blur-sm shadow-sm ${pillBg}`}

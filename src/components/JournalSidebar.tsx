@@ -14,6 +14,9 @@ import {
   Unlock,
   Sparkles,
   Download,
+  User as UserIcon,
+  LogOut,
+  Feather,
 } from 'lucide-react';
 import type {
   JournalEntry,
@@ -21,6 +24,7 @@ import type {
   ThemeMode,
   SpotlightIntensity,
   AppSettings,
+  User,
 } from '../types';
 
 interface JournalSidebarProps {
@@ -28,6 +32,9 @@ interface JournalSidebarProps {
   onClose: () => void;
   entries: JournalEntry[];
   currentEntryId: string;
+  currentUser: User | null;
+  onOpenAuth: () => void;
+  onSignOut: () => void;
   onSelectEntry: (id: string) => void;
   onCreateEntry: (type: EntryType) => void;
   onDeleteEntry: (id: string) => void;
@@ -42,6 +49,9 @@ export const JournalSidebar: React.FC<JournalSidebarProps> = ({
   onClose,
   entries,
   currentEntryId,
+  currentUser,
+  onOpenAuth,
+  onSignOut,
   onSelectEntry,
   onCreateEntry,
   onDeleteEntry,
@@ -69,6 +79,11 @@ export const JournalSidebar: React.FC<JournalSidebarProps> = ({
       return matchesType && matchesQuery;
     });
   }, [entries, filterType, searchQuery]);
+
+  // Total words across user's archives
+  const totalWords = useMemo(() => {
+    return entries.reduce((acc, e) => acc + (e.wordCount || 0), 0);
+  }, [entries]);
 
   // Handle inline title editing
   const handleStartEditTitle = (entry: JournalEntry, e: React.MouseEvent) => {
@@ -146,6 +161,47 @@ export const JournalSidebar: React.FC<JournalSidebarProps> = ({
           >
             <X className="w-4 h-4" />
           </button>
+        </div>
+
+        {/* Author Status Card */}
+        <div className="p-3.5 border-b border-current/10 bg-current/5 text-xs flex items-center justify-between">
+          {currentUser ? (
+            <div className="flex items-center gap-2.5 flex-1 min-w-0">
+              <span className="w-7 h-7 rounded-full bg-current text-white dark:text-black flex items-center justify-center font-bold text-xs shrink-0">
+                {currentUser.avatarLetter}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="font-bold truncate">{currentUser.name}</div>
+                <div className="text-[10px] opacity-60 truncate">
+                  {entries.length} docs · {totalWords} words written
+                </div>
+              </div>
+              <button
+                onClick={onSignOut}
+                title="Sign Out"
+                className="p-1.5 rounded hover:bg-current/10 text-red-500/80 hover:text-red-500 transition-colors cursor-pointer"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-2">
+                <Feather className="w-3.5 h-3.5 opacity-60" />
+                <span className="text-[11px] opacity-75">Guest Writer</span>
+              </div>
+              <button
+                onClick={() => {
+                  onOpenAuth();
+                  onClose();
+                }}
+                className="px-2.5 py-1 rounded border border-current/25 hover:bg-current/10 text-[11px] font-semibold uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                <UserIcon className="w-3 h-3" />
+                <span>Sign In / Up</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Navigation Tabs (Entries vs Settings) */}

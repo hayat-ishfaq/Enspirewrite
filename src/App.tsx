@@ -3,17 +3,18 @@ import { EditorCanvas } from './components/EditorCanvas';
 import { CarriageSpotlight } from './components/CarriageSpotlight';
 import { JournalSidebar } from './components/JournalSidebar';
 import { MinimalHUD } from './components/MinimalHUD';
+import { AuthModal } from './components/AuthModal';
 import { typewriterAudio } from './audio/typewriterAudio';
+import { authService } from './services/authService';
 import type {
   JournalEntry,
   EntryType,
   AppSettings,
   ThemeMode,
   SpotlightIntensity,
+  User,
 } from './types';
 
-const STORAGE_ENTRIES_KEY = 'enspirewrite_entries_v1';
-const STORAGE_CURRENT_ID_KEY = 'enspirewrite_current_id_v1';
 const STORAGE_SETTINGS_KEY = 'enspirewrite_settings_v1';
 
 function getFormattedDate(d = new Date()): string {
@@ -24,47 +25,65 @@ function getFormattedDate(d = new Date()): string {
   }).format(d);
 }
 
-const INITIAL_WELCOME_CONTENT = `# The Mechanical Ribbon
-Nov 18, 2026
+function getInitialWelcomeContent(authorName: string = 'Writer'): string {
+  return `# The Mechanical Ribbon
+${getFormattedDate()}
 
-There is a quiet dignity in the mechanical carriage.
-Every keystroke strikes with intention, leaving indelible ink upon the paper roll.
+Welcome to your personal archival ledger, ${authorName}.
+There is a quiet dignity in the mechanical carriage. Every keystroke strikes with intention, leaving indelible ink upon the paper roll.
 
 Notice how this line remains held at sixty-two percent down your screen. As your thoughts spill forward and you press return, the carriage slides upward with a crystalline chime, keeping your active line anchored directly above the polished metallic track.
 
 Above the carriage, an upward beam of warm light cuts through the twilight, casting soft illumination on your immediate words while older passages gently dissolve into the atmosphere above.
 
-Press [Ctrl + B] to open the archival ledger.
-Press [Ctrl + M] to toggle the mechanical key strikes.
+Press [Ctrl + B] to open your ledger archives.
+Press [Ctrl + M] to toggle mechanical key strikes.
 Press Enter at the end of this line to hear the return bell...
 `;
+}
 
-const INITIAL_ENTRIES: JournalEntry[] = [
-  {
-    id: 'entry-diary-default',
-    type: 'diary',
-    title: `Diary — ${getFormattedDate()}`,
-    content: INITIAL_WELCOME_CONTENT,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    dateLabel: getFormattedDate(),
-    wordCount: INITIAL_WELCOME_CONTENT.trim().split(/\s+/).length,
-    charCount: INITIAL_WELCOME_CONTENT.length,
-  },
-  {
-    id: 'entry-note-manifesto',
-    type: 'note',
-    title: 'The Tactile Manifesto',
-    content: `A writer requires neither notifications nor distractions. Only a clean margin, a responsive platen, and the tactile rhythm of metal striking paper.
+function createDefaultEntries(user?: User | null): JournalEntry[] {
+  const authorName = user ? user.name : 'Writer';
+  const welcomeText = getInitialWelcomeContent(authorName);
+  const today = getFormattedDate();
+
+  return [
+    {
+      id: `entry-diary-${Date.now()}`,
+      userId: user?.id,
+      type: 'diary',
+      title: `Diary — ${today}`,
+      content: welcomeText,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      dateLabel: today,
+      wordCount: welcomeText.trim().split(/\s+/).length,
+      charCount: welcomeText.length,
+    },
+    {
+      id: `entry-note-manifesto-${Date.now()}`,
+      userId: user?.id,
+      type: 'note',
+      title: 'The Tactile Manifesto',
+      content: `A writer requires neither notifications nor distractions. Only a clean margin, a responsive platen, and the tactile rhythm of metal striking paper.
 
 Typewriters do not judge our hesitation; they merely wait in patient stillness for the next word.`,
-    createdAt: new Date(Date.now() - 86400000).toISOString(),
-    updatedAt: new Date(Date.now() - 86400000).toISOString(),
-    dateLabel: getFormattedDate(new Date(Date.now() - 86400000)),
-    wordCount: 35,
-    charCount: 226,
-  },
-];
+      createdAt: new Date(Date.now() - 86400000).toISOString(),
+      updatedAt: new Date(Date.now() - 86400000).toISOString(),
+      dateLabel: getFormattedDate(new Date(Date.now() - 86400000)),
+      wordCount: 35,
+      charCount: 226,
+    },
+  ];
+}
+
+function getStorageEntriesKey(user: User | null): string {
+  return user ? `enspirewrite_entries_user_${user.id}` : 'enspirewrite_entries_guest_v1';
+}
+
+function getStorageCurrentIdKey(user: User | null): string {
+  return user ? `enspirewrite_current_id_${user.id}` : 'enspirewrite_current_id_guest_v1';
+}
 
 const DEFAULT_SETTINGS: AppSettings = {
   theme: 'slate',
@@ -76,25 +95,33 @@ const DEFAULT_SETTINGS: AppSettings = {
 };
 
 export const App: React.FC = () => {
-  // Load initial entries
+  // Authentication state
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    return authService.getCurrentUser();
+  });
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+
+  // Load entries for current user
   const [entries, setEntries] = useState<JournalEntry[]>(() => {
+    const key = getStorageEntriesKey(currentUser);
     try {
-      const saved = localStorage.getItem(STORAGE_ENTRIES_KEY);
+      const saved = localStorage.getItem(key);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
     } catch {}
-    return INITIAL_ENTRIES;
+    return createDefaultEntries(currentUser);
   });
 
   // Current active entry ID
   const [currentEntryId, setCurrentEntryId] = useState<string>(() => {
+    const idKey = getStorageCurrentIdKey(currentUser);
     try {
-      const saved = localStorage.getItem(STORAGE_CURRENT_ID_KEY);
-      if (saved) return saved;
+      const saved = localStorage.getItem(idKey);
+      if (saved && entries.some((e) => e.id === saved)) return saved;
     } catch {}
-    return entries[0]?.id || 'entry-diary-default';
+    return entries[0]?.id || '';
   });
 
   // Settings
@@ -116,26 +143,66 @@ export const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
   const [isEditorFocused, setIsEditorFocused] = useState<boolean>(true);
 
+  // Switch ledger data when author account changes
+  const switchAuthorAccount = useCallback((newUser: User | null) => {
+    setCurrentUser(newUser);
+    const key = getStorageEntriesKey(newUser);
+    let userEntries: JournalEntry[] = [];
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          userEntries = parsed;
+        }
+      }
+    } catch {}
+
+    if (userEntries.length === 0) {
+      userEntries = createDefaultEntries(newUser);
+    }
+
+    setEntries(userEntries);
+    const idKey = getStorageCurrentIdKey(newUser);
+    const savedId = localStorage.getItem(idKey);
+    if (savedId && userEntries.some((e) => e.id === savedId)) {
+      setCurrentEntryId(savedId);
+    } else {
+      setCurrentEntryId(userEntries[0]?.id || '');
+    }
+  }, []);
+
+  const handleAuthSuccess = (user: User) => {
+    switchAuthorAccount(user);
+  };
+
+  const handleSignOut = () => {
+    authService.signOut();
+    switchAuthorAccount(null);
+  };
+
   // Active document
   const currentEntry = useMemo(() => {
-    return entries.find((e) => e.id === currentEntryId) || entries[0];
-  }, [entries, currentEntryId]);
+    return entries.find((e) => e.id === currentEntryId) || entries[0] || createDefaultEntries(currentUser)[0];
+  }, [entries, currentEntryId, currentUser]);
 
-  // Persist entries to localStorage
+  // Persist entries to user-scoped storage
   useEffect(() => {
+    const key = getStorageEntriesKey(currentUser);
     try {
-      localStorage.setItem(STORAGE_ENTRIES_KEY, JSON.stringify(entries));
+      localStorage.setItem(key, JSON.stringify(entries));
     } catch (e) {
       console.warn('Failed to save entries to localStorage', e);
     }
-  }, [entries]);
+  }, [entries, currentUser]);
 
   // Persist current ID
   useEffect(() => {
+    const idKey = getStorageCurrentIdKey(currentUser);
     try {
-      localStorage.setItem(STORAGE_CURRENT_ID_KEY, currentEntryId);
+      localStorage.setItem(idKey, currentEntryId);
     } catch {}
-  }, [currentEntryId]);
+  }, [currentEntryId, currentUser]);
 
   // Persist settings & sync audio
   useEffect(() => {
@@ -179,6 +246,7 @@ export const App: React.FC = () => {
 
     const newEntry: JournalEntry = {
       id: newId,
+      userId: currentUser?.id,
       type,
       title: newTitle,
       content: '',
@@ -191,7 +259,7 @@ export const App: React.FC = () => {
 
     setEntries((prev) => [newEntry, ...prev]);
     setCurrentEntryId(newId);
-  }, []);
+  }, [currentUser]);
 
   // Delete entry
   const handleDeleteEntry = useCallback(
@@ -268,10 +336,11 @@ export const App: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `enspirewrite_archives_${new Date().toISOString().slice(0, 10)}.json`;
+    const authorTag = currentUser ? currentUser.name.replace(/[^a-z0-9]/gi, '_').toLowerCase() : 'guest';
+    a.download = `enspirewrite_${authorTag}_archives_${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [entries]);
+  }, [entries, currentUser]);
 
   // Global Keyboard Shortcuts
   useEffect(() => {
@@ -328,6 +397,9 @@ export const App: React.FC = () => {
         font={settings.font}
         spotlightIntensity={settings.spotlightIntensity}
         isMuted={settings.isMuted}
+        currentUser={currentUser}
+        onOpenAuth={() => setIsAuthModalOpen(true)}
+        onSignOut={handleSignOut}
         onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
         onToggleMute={handleToggleMute}
         onCycleTheme={handleCycleTheme}
@@ -365,6 +437,9 @@ export const App: React.FC = () => {
         onClose={() => setIsSidebarOpen(false)}
         entries={entries}
         currentEntryId={currentEntry.id}
+        currentUser={currentUser}
+        onOpenAuth={() => setIsAuthModalOpen(true)}
+        onSignOut={handleSignOut}
         onSelectEntry={(id) => setCurrentEntryId(id)}
         onCreateEntry={handleCreateEntry}
         onDeleteEntry={handleDeleteEntry}
@@ -372,6 +447,14 @@ export const App: React.FC = () => {
         settings={settings}
         onUpdateSettings={handleUpdateSettings}
         onExportAll={handleExportAll}
+      />
+
+      {/* 5. AUTHOR AUTHENTICATION MODAL */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onAuthSuccess={handleAuthSuccess}
+        theme={settings.theme}
       />
     </div>
   );

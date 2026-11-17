@@ -6,8 +6,18 @@ export type SpotlightIntensity = 'off' | 'subtle' | 'atmospheric' | 'dramatic';
 
 export type EntryType = 'diary' | 'note';
 
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  passwordHash: string;
+  createdAt: string;
+  avatarLetter: string;
+}
+
 export interface JournalEntry {
   id: string;
+  userId?: string;
   type: EntryType;
   title: string;
   content: string;
