@@ -1,0 +1,16 @@
+{
+  "name": "Enspirewrite — Tactile Typewriter Journal",
+  "short_name": "Enspirewrite",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#9a9aa0",
+  "theme_color": "#9a9aa0",
+  "description": "Minimalist tactile vintage-typewriter journaling, notes, and diary app.",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

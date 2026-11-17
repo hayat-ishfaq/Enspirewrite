@@ -27,11 +27,11 @@ export const EditorCanvas: React.FC<EditorCanvasProps> = ({
   const isComposingRef = useRef<boolean>(false);
   const lastScrollTopRef = useRef<number>(0);
 
-  // Font family string
+  // Font family string with robust offline fallbacks
   const fontFamily =
     font === 'ibm-plex'
-      ? "'IBM Plex Mono', monospace"
-      : "'Courier Prime', monospace";
+      ? "'IBM Plex Mono', 'Cascadia Code', 'Consolas', monospace"
+      : "'Courier Prime', 'Courier New', 'Courier', monospace";
 
   // Ink color according to theme
   const inkColor = {
