@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { getCaretCoordinates } from '../utils/caretPosition';
 import { typewriterAudio } from '../audio/typewriterAudio';
 import type { ThemeMode, FontChoice } from '../types';
@@ -25,7 +25,9 @@ export const EditorCanvas: React.FC<EditorCanvasProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isComposingRef = useRef<boolean>(false);
-  const lastScrollTopRef = useRef<number>(0);
+  const isUserScrollingRef = useRef<boolean>(false);
+  const userScrollTimeoutRef = useRef<number | null>(null);
+  const [isScrolledAway, setIsScrolledAway] = useState<boolean>(false);
 
   // Font family string with robust offline fallbacks
   const fontFamily =
@@ -40,12 +42,23 @@ export const EditorCanvas: React.FC<EditorCanvasProps> = ({
     sepia: 'text-[#2a221a] placeholder-[#7d6f63]',
   }[theme];
 
+  // Dynamically adjust textarea height to fit content exactly so it never scrolls internally
+  const adjustTextareaHeight = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    const newHeight = Math.max(320, textarea.scrollHeight);
+    textarea.style.height = `${newHeight}px`;
+  }, []);
+
   // Measure and align caret and scroll lock
   const updateCaretAndScroll = useCallback(
-    (smoothScroll: boolean = false) => {
+    (smoothScroll: boolean = false, forceLock: boolean = false) => {
       const textarea = textareaRef.current;
       const container = containerRef.current;
       if (!textarea || !container) return;
+
+      adjustTextareaHeight();
 
       const vh = window.innerHeight;
       const lockViewportY = vh * 0.62; // 62% down the viewport
@@ -65,12 +78,21 @@ export const EditorCanvas: React.FC<EditorCanvasProps> = ({
       if (!typewriterLockEnabled) return;
 
       // Calculate desired scroll position
-      // In our container: top padding is 65vh, bottom padding is 40vh
+      // Top padding of container is 65vh
       const paddingTop = vh * 0.65;
       const lineYInContainer = paddingTop + coords.elementY;
-      const targetScrollTop = lineYInContainer - lockViewportY + coords.lineHeight / 2;
+      const targetScrollTop = Math.max(0, lineYInContainer - lockViewportY + coords.lineHeight / 2);
 
-      if (Math.abs(container.scrollTop - targetScrollTop) > 1) {
+      // If user is actively scrolling with mouse wheel and not forcing a lock, don't interrupt
+      if (isUserScrollingRef.current && !forceLock) {
+        const diff = Math.abs(container.scrollTop - targetScrollTop);
+        setIsScrolledAway(diff > 60);
+        return;
+      }
+
+      setIsScrolledAway(false);
+
+      if (Math.abs(container.scrollTop - targetScrollTop) > 2) {
         if (smoothScroll) {
           container.scrollTo({
             top: targetScrollTop,
@@ -79,39 +101,73 @@ export const EditorCanvas: React.FC<EditorCanvasProps> = ({
         } else {
           container.scrollTop = targetScrollTop;
         }
-        lastScrollTopRef.current = targetScrollTop;
       }
     },
-    [onCaretChange, typewriterLockEnabled]
+    [onCaretChange, typewriterLockEnabled, adjustTextareaHeight]
   );
 
   // Synchronize on content changes or window resize
   useEffect(() => {
     const handleResize = () => {
-      updateCaretAndScroll(false);
+      adjustTextareaHeight();
+      updateCaretAndScroll(false, true);
     };
 
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [updateCaretAndScroll]);
+  }, [updateCaretAndScroll, adjustTextareaHeight]);
 
-  // Initial positioning after mount
+  // Adjust height and initial positioning after mount or content change
   useEffect(() => {
+    adjustTextareaHeight();
     const timer = setTimeout(() => {
-      updateCaretAndScroll(false);
-    }, 50);
+      updateCaretAndScroll(false, true);
+    }, 60);
     return () => clearTimeout(timer);
-  }, [content, updateCaretAndScroll]);
+  }, [content, updateCaretAndScroll, adjustTextareaHeight]);
+
+  // Detect manual mouse wheel scrolling so the user can freely scroll up/down without fighting the lock
+  const handleWheel = () => {
+    isUserScrollingRef.current = true;
+    if (userScrollTimeoutRef.current) {
+      window.clearTimeout(userScrollTimeoutRef.current);
+    }
+    userScrollTimeoutRef.current = window.setTimeout(() => {
+      isUserScrollingRef.current = false;
+      const container = containerRef.current;
+      const textarea = textareaRef.current;
+      if (container && textarea) {
+        const vh = window.innerHeight;
+        const lockViewportY = vh * 0.62;
+        const coords = getCaretCoordinates(textarea, textarea.selectionStart);
+        const paddingTop = vh * 0.65;
+        const lineYInContainer = paddingTop + coords.elementY;
+        const targetScrollTop = Math.max(0, lineYInContainer - lockViewportY + coords.lineHeight / 2);
+        setIsScrolledAway(Math.abs(container.scrollTop - targetScrollTop) > 60);
+      }
+    }, 1200);
+  };
+
+  // Re-center on active line
+  const handleRecenter = () => {
+    isUserScrollingRef.current = false;
+    updateCaretAndScroll(true, true);
+    if (textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  };
 
   // Handle keyboard sound synthesis & shortcuts
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    isUserScrollingRef.current = false;
+
     // Check if audio should play
     if (e.key === 'Enter') {
       typewriterAudio.playCarriageReturn();
-      // On enter, give smooth scroll upwards to feel like a carriage return
-      requestAnimationFrame(() => {
-        updateCaretAndScroll(true);
-      });
+      // On enter, smoothly scroll upward so the new line settles on 62vh
+      setTimeout(() => {
+        updateCaretAndScroll(true, true);
+      }, 10);
       return;
     }
 
@@ -126,29 +182,53 @@ export const EditorCanvas: React.FC<EditorCanvasProps> = ({
       typewriterAudio.playKeyClick();
     }
 
-    // Defer coordinate update to after DOM mutation
-    requestAnimationFrame(() => {
-      updateCaretAndScroll(false);
-    });
+    // Navigation keys (ArrowUp, ArrowDown, PageUp, PageDown, Home, End):
+    // Use smooth scroll so line jumps feel tactile and graceful
+    const isNavKey =
+      e.key === 'ArrowUp' ||
+      e.key === 'ArrowDown' ||
+      e.key === 'PageUp' ||
+      e.key === 'PageDown' ||
+      e.key === 'Home' ||
+      e.key === 'End';
+
+    setTimeout(() => {
+      updateCaretAndScroll(isNavKey, true);
+    }, 0);
   };
 
-  const handleKeyUp = () => {
-    updateCaretAndScroll(false);
+  const handleKeyUp = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const isNavKey =
+      e.key === 'ArrowUp' ||
+      e.key === 'ArrowDown' ||
+      e.key === 'PageUp' ||
+      e.key === 'PageDown';
+
+    setTimeout(() => {
+      updateCaretAndScroll(isNavKey, true);
+    }, 0);
   };
 
   const handleClick = () => {
-    updateCaretAndScroll(true);
+    isUserScrollingRef.current = false;
+    setTimeout(() => {
+      updateCaretAndScroll(true, true);
+    }, 0);
   };
 
   const handleSelect = () => {
-    updateCaretAndScroll(false);
+    setTimeout(() => {
+      updateCaretAndScroll(false, false);
+    }, 0);
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    isUserScrollingRef.current = false;
     onChange(e.target.value);
-    requestAnimationFrame(() => {
-      updateCaretAndScroll(false);
-    });
+    adjustTextareaHeight();
+    setTimeout(() => {
+      updateCaretAndScroll(false, true);
+    }, 0);
   };
 
   // Focus textarea when clicking anywhere in canvas container
@@ -161,11 +241,12 @@ export const EditorCanvas: React.FC<EditorCanvasProps> = ({
   return (
     <div
       ref={containerRef}
+      onWheel={handleWheel}
       onClick={handleContainerClick}
-      className="relative w-full h-full overflow-y-auto no-scrollbar cursor-text select-text"
+      className="relative w-full h-full overflow-y-scroll overscroll-y-contain no-scrollbar cursor-text select-text"
       style={{
         paddingTop: '65vh',
-        paddingBottom: '40vh',
+        paddingBottom: '60vh',
       }}
     >
       <div className="w-full max-w-3xl mx-auto px-8 relative">
@@ -179,7 +260,7 @@ export const EditorCanvas: React.FC<EditorCanvasProps> = ({
           onSelect={handleSelect}
           onFocus={() => {
             onFocusChange(true);
-            updateCaretAndScroll(false);
+            updateCaretAndScroll(false, true);
           }}
           onBlur={() => {
             onFocusChange(false);
@@ -189,7 +270,7 @@ export const EditorCanvas: React.FC<EditorCanvasProps> = ({
           }}
           onCompositionEnd={() => {
             isComposingRef.current = false;
-            updateCaretAndScroll(false);
+            updateCaretAndScroll(false, true);
           }}
           spellCheck={false}
           autoFocus
@@ -197,12 +278,24 @@ export const EditorCanvas: React.FC<EditorCanvasProps> = ({
           className={`w-full bg-transparent resize-none border-none outline-none overflow-hidden text-[18px] leading-[32.4px] ${inkColor} selection:bg-amber-400/25 selection:text-current`}
           style={{
             fontFamily,
-            minHeight: '280px',
-            height: 'auto',
+            minHeight: '320px',
           }}
-          rows={Math.max(12, content.split('\n').length + 3)}
         />
       </div>
+
+      {/* Subtle "Return to Carriage" indicator when user manually scrolls far away */}
+      {isScrolledAway && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            handleRecenter();
+          }}
+          className="fixed bottom-8 left-1/2 -translate-x-1/2 z-40 px-4 py-2 rounded-full border border-current/20 bg-black/60 dark:bg-white/10 text-white backdrop-blur-md text-xs font-mono tracking-wider uppercase cursor-pointer shadow-lg transition-all hover:scale-105 active:scale-95 animate-fade-in flex items-center gap-2"
+        >
+          <span>Return to Active Line</span>
+          <span className="text-[10px] opacity-60">↓</span>
+        </button>
+      )}
     </div>
   );
 };
